@@ -8,13 +8,33 @@ Esta evaluación técnica se basa en una aplicación Android que implementa un s
 ### 1.1 Identificación de Vulnerabilidades (2 puntos)
 Analiza el archivo `DataProtectionManager.kt` y responde:
 - ¿Qué método de encriptación se utiliza para proteger datos sensibles?
+    Se utiliza EncryptedSharedPreferences con los siguientes esquemas de cifrado:
+      - MasterKey.KeyScheme.AES256_GCM,
+      - EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+      - EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
 - Identifica al menos 2 posibles vulnerabilidades en la implementación actual del logging
+    1. El archivo guarda los accesos en SharedPreferences sin ningún tipo de encriptación:
+       accessLogPrefs = context.getSharedPreferences("access_logs", Context.MODE_PRIVATE)
+       Esto permite a cualquier app con root o privilegios leer los logs de acceso, lo que podría exponer patrones de uso o nombres de claves.
+    2. El método logAccess guarda el nombre de la clave accedida:
+       logAccess("DATA_ACCESS", "Dato accedido: $key")
+       Si key contiene información sensible (como "password", "token", etc.), se estaría exponiendo indirectamente esa sensibilidad.
 - ¿Qué sucede si falla la inicialización del sistema de encriptación?
 
 ### 1.2 Permisos y Manifiesto (2 puntos)
 Examina `AndroidManifest.xml` y `MainActivity.kt`:
 - Lista todos los permisos peligrosos declarados en el manifiesto
+  Los siguientes permisos son considerados peligrosos según la documentación oficial de Android (requieren consentimiento explícito del usuario en tiempo de ejecución):
+  	android.permission.CAMERA
+  	android.permission.READ_EXTERNAL_STORAGE (obsoleto en versiones recientes, reemplazado por otros como READ_MEDIA_IMAGES)
+  	android.permission.READ_MEDIA_IMAGES (peligroso a partir de Android 13)
+  	android.permission.RECORD_AUDIO
+  	android.permission.READ_CONTACTS
+  	android.permission.CALL_PHONE
+  	android.permission.SEND_SMS
+  	android.permission.ACCESS_COARSE_LOCATION
 - ¿Qué patrón se utiliza para solicitar permisos en runtime?
+    
 - Identifica qué configuración de seguridad previene backups automáticos
 
 ### 1.3 Gestión de Archivos (3 puntos)
