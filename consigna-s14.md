@@ -20,7 +20,7 @@ Analiza el archivo `DataProtectionManager.kt` y responde:
        logAccess("DATA_ACCESS", "Dato accedido: $key")
        Si key contiene información sensible (como "password", "token", etc.), se estaría exponiendo indirectamente esa sensibilidad.
 - ¿Qué sucede si falla la inicialización del sistema de encriptación?
-
+  Si ocurre una excepción durante la creación del MasterKey o de las EncryptedSharedPreferences, se captura mediante try-catch, y el sistema recupera utilizando SharedPreferences sin encriptación (secure_prefs_fallback).
 ### 1.2 Permisos y Manifiesto (2 puntos)
 Examina `AndroidManifest.xml` y `MainActivity.kt`:
 - Lista todos los permisos peligrosos declarados en el manifiesto
@@ -34,15 +34,61 @@ Examina `AndroidManifest.xml` y `MainActivity.kt`:
   	android.permission.SEND_SMS
   	android.permission.ACCESS_COARSE_LOCATION
 - ¿Qué patrón se utiliza para solicitar permisos en runtime?
-    
+  Patrón usado: ActivityResultContracts.RequestPermission
 - Identifica qué configuración de seguridad previene backups automáticos
-
+  <application
+  android:allowBackup="false"
+  ...
+  />
+  La línea android:allowBackup="false" en el AndroidManifest.xml desactiva las copias de seguridad automáticas del sistema Android (como las que realiza Google Drive o adb backup).
 ### 1.3 Gestión de Archivos (3 puntos)
 Revisa `CameraActivity.kt` y `file_paths.xml`:
 - ¿Cómo se implementa la compartición segura de archivos de imágenes?
-- ¿Qué autoridad se utiliza para el FileProvider?
+  1. Creación del archivo en almacenamiento externo privado
+     private fun createImageFile(): File {
+     val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+     .format(Date())
+     val storageDir = File(getExternalFilesDir(null), "Pictures")
+     if (!storageDir.exists()) storageDir.mkdirs()
+     return File(storageDir, "JPEG_${timeStamp}_.jpg")
+     }
+  2. Obtención del URI seguro con FileProvider
+     val photoFile = createImageFile()
+     currentPhotoUri = FileProvider.getUriForFile(
+     this,
+     "com.example.seguridad_priv_a.fileprovider",
+     photoFile
+     )
+  3. Lanzar la cámara pasando ese URI
+     takePictureLauncher.launch(currentPhotoUri)
+  4. Definición de rutas permitidas en file_paths.xml
+    <?xml version="1.0" encoding="utf-8"?>
+    <paths xmlns:android="http://schemas.android.com/apk/res/android">
+        <external-files-path name="my_images" path="Pictures" />
+        <external-files-path name="my_audio"  path="Audio"    />
+    </paths>
+  - ¿Qué autoridad se utiliza para el FileProvider?
+    En el AndroidManifest.xml aparece registrado así:
+      <provider
+        android:name="androidx.core.content.FileProvider"
+        android:authorities="com.example.seguridad_priv_a.fileprovider"
+        android:exported="false"
+        android:grantUriPermissions="true">
+        <meta-data
+          android:name="android.support.FILE_PROVIDER_PATHS"
+          android:resource="@xml/file_paths" />
+      </provider>
+    Por lo tanto, la authority es:
+      com.example.seguridad_priv_a.fileprovider
 - Explica por qué no se debe usar `file://` URIs directamente
-
+  1. Seguridad y permisos
+     - Un URI file:// expone la ruta absoluta en el sistema de archivos, lo que puede filtrar información de la estructura interna de la app.
+     - No permite gestionar permisos de lectura/escritura de forma granular al pasar el URI en un Intent.
+  2. Compatibilidad (“StrictMode”)
+     - Desde Android 7.0 (API 24), el sistema lanza una excepción FileUriExposedException si intentas compartir un URI file:// con otro proceso.
+  3. Control de acceso temporal
+     - Con un content:// vía FileProvider, puedes usar los flags Intent.FLAG_GRANT_READ_URI_PERMISSION y/o FLAG_GRANT_WRITE_URI_PERMISSION para otorgar acceso solo durante la vida del Intent, sin exponer el archivo globalmente.
+  Por estas razones, siempre se recomienda envolver los archivos en un FileProvider y compartir content:// URIs en lugar de file://.
 ## Parte 2: Implementación y Mejoras Intermedias (8-14 puntos)
 
 ### 2.1 Fortalecimiento de la Encriptación (3 puntos)
